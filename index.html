@@ -1,0 +1,432 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="manifest" href="manifest.json" />
+    <title>noovs@terminal</title>
+    <style>
+      :root {
+        --bg: #0a0a0a;
+        --fg: #39d353;
+        --fg-dim: #1f6d33;
+        --fg-muted: #6b7280;
+        --white: #d1d5db;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--fg);
+        font-family:
+          ui-monospace, SFMono-Regular, "Courier New", Consolas, monospace;
+        font-size: 15px;
+        line-height: 1.6;
+      }
+      a {
+        color: var(--fg);
+      }
+      a:hover {
+        color: var(--white);
+      }
+
+      #app {
+        max-width: 760px;
+        margin: 0 auto;
+        padding: 24px 16px 60px;
+      }
+
+      .prompt-line {
+        color: var(--fg-muted);
+      }
+      .prompt-line span.cmd {
+        color: var(--fg);
+      }
+      .cursor {
+        display: inline-block;
+        width: 8px;
+        background: var(--fg);
+        animation: blink 1s steps(1) infinite;
+        margin-left: 2px;
+      }
+      @keyframes blink {
+        50% {
+          opacity: 0;
+        }
+      }
+
+      h1 {
+        font-size: 15px;
+        font-weight: normal;
+        margin: 0 0 4px;
+      }
+      h2 {
+        font-size: 15px;
+        font-weight: normal;
+        color: var(--fg-muted);
+        margin: 32px 0 8px;
+      }
+      h2::before {
+        content: "# ";
+      }
+
+      section {
+        margin-top: 8px;
+      }
+
+      ul.announcements,
+      ul.subjects {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+      }
+      ul.announcements li {
+        padding: 4px 0;
+        color: var(--white);
+      }
+      ul.announcements li::before {
+        content: "> ";
+        color: var(--fg);
+      }
+      ul.announcements li .date {
+        color: var(--fg-muted);
+        margin-right: 8px;
+      }
+
+      details.subject {
+        margin-bottom: 4px;
+      }
+      details.subject > summary {
+        cursor: pointer;
+        color: var(--fg);
+        list-style: none;
+      }
+      details.subject > summary::-webkit-details-marker {
+        display: none;
+      }
+      details.subject > summary::before {
+        content: "+ ";
+      }
+      details.subject[open] > summary::before {
+        content: "- ";
+      }
+
+      details.topic {
+        margin-left: 20px;
+      }
+      details.topic > summary {
+        cursor: pointer;
+        color: var(--white);
+        list-style: none;
+      }
+      details.topic > summary::-webkit-details-marker {
+        display: none;
+      }
+      details.topic > summary::before {
+        content: "  ";
+        color: var(--fg-muted);
+      }
+
+      ul.resources {
+        list-style: none;
+        margin: 4px 0 8px 40px;
+        padding: 0;
+      }
+      ul.resources li {
+        color: var(--fg-muted);
+      }
+      ul.resources li a {
+        text-decoration: none;
+      }
+      ul.resources li a:hover {
+        text-decoration: underline;
+      }
+      ul.resources li::before {
+        content: "- ";
+      }
+
+      .quote-box {
+        color: var(--white);
+      }
+      .quote-box .q {
+        color: var(--fg);
+      }
+      .quote-box button {
+        background: none;
+        border: none;
+        color: var(--fg-muted);
+        font-family: inherit;
+        font-size: inherit;
+        cursor: pointer;
+        padding: 0;
+        margin-top: 6px;
+      }
+      .quote-box button:hover {
+        color: var(--fg);
+      }
+
+      footer {
+        margin-top: 48px;
+        color: var(--fg-dim);
+        font-size: 13px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <h1>
+        <span class="prompt-line"
+          >noovs@terminal:~$ <span class="cmd">whoami</span></span
+        >
+      </h1>
+      <p style="margin: 0 0 8px">
+        a shared space for notes, pdfs and important dates<span class="cursor"
+          >&nbsp;</span
+        >
+      </p>
+
+      <h2>announcements</h2>
+      <section>
+        <ul class="announcements" id="announcements">
+          <li>loading...</li>
+        </ul>
+      </section>
+
+      <h2>subjects</h2>
+      <section id="subjects"></section>
+
+      <h2>quote</h2>
+      <section class="quote-box">
+        <p class="q" id="quote-text"></p>
+        <button id="next-quote">[ next quote ]</button>
+      </section>
+
+      <footer>noovs@terminal:~$ <span class="cursor">&nbsp;</span></footer>
+    </div>
+
+    <script>
+      const ANNOUNCEMENTS_CSV_URL =
+        "https://docs.google.com/spreadsheets/d/e/2PACX-1vT0gDmrX5-V1QecurtwOk8lZXOXKkrHDzMesT7daqhgFMwwSks98CXTywEJ5SwVIxtmqDSlVI23M1-o/pub?output=csv";
+
+      const FALLBACK_ANNOUNCEMENTS = [
+        {
+          date: "—",
+          text: "add your Google Sheet CSV link in the config to replace this list",
+        },
+      ];
+
+      const SUBJECTS = [
+        {
+          name: "Notes",
+          topics: [
+            {
+              name: "MERN Stack",
+              resources: [
+                {
+                  title: "React Notes (PDF)",
+                  url: "https://drive.google.com/file/d/1CfAkqeTPun_bTJH02SOtg0-cYf_KYUtH/view?usp=drive_link",
+                },
+                {
+                  title: "JS notes (PDF)",
+                  url: "https://drive.google.com/file/d/1ZchsT8n24QBCOtEqIhjpT1mTf85dNtVf/view?usp=drive_link",
+                },
+                {
+                  title: "HTML questions (PDF)",
+                  url: "https://drive.google.com/file/d/101GVv_JBo5SJ_VKfbhMzROIsGwNWcjNT/view?usp=drive_link",
+                },
+                {
+                  title: "CSS questions (PDF)",
+                  url: "https://drive.google.com/file/d/1WWxKD8lkFFAaiaeLkypGDuE_QqQJqp_2/view?usp=drive_link",
+                },
+              ],
+            },
+            {
+              name: "JAVA notes",
+              resources: [
+                {
+                  title: "JAVA notes (PDF)",
+                  url: "https://drive.google.com/file/d/13CrPgKEz73eX6ZzpZlO15lQpavrFYxQ0/view?usp=drive_link",
+                },
+              ],
+            },
+          ],
+        },
+        {
+          name: "Cryptography and cyber security",
+          topics: [
+            {
+              name: "Book",
+              resources: [
+                {
+                  title: "Cryptorgraphy and network security book (PDF)",
+                  url: "https://drive.google.com/file/d/1APoH-yOXoG1h6r-j68Ng55q4S6ZlsDtU/view?usp=drive_link",
+                },
+              ],
+            },
+          ],
+        },
+
+        {
+          name: ".NET framework",
+          topics: [
+            {
+              name: "Notes",
+              resources: [
+                {
+                  title: "GUI using .net framework notes (PDF)",
+                  url: "https://drive.google.com/file/d/1w6kTLrnZVLYlCv3Kv1n_LiTC0Th6S7AB/view?usp=drive_link",
+                },
+              ],
+            },
+          ],
+        },
+
+        {
+          name: "Aptitude and Reasoning",
+          topics: [
+            {
+              name: "Reasoning",
+              resources: [
+                {
+                  title: "Blood relation questions (PDF)",
+                  url: "https://drive.google.com/file/d/10tjdhgKNM8ESbq6KbtObI9nvh8Vdrgal/view?usp=drive_link",
+                },
+                {
+                  title: "Coding - decoding questions (PDF)",
+                  url: "https://drive.google.com/file/d/1vsIyZKsrLV6asU8QI_W1iiOpjV8fH2bu/view?usp=drive_link",
+                },
+                {
+                  title: "Distance and direction questions (PDF)",
+                  url: "https://drive.google.com/file/d/1KCR5PBJeGGp6oSj9mb1yq2bBJiMy5-ma/view?usp=drive_link",
+                },
+              ],
+            },
+            {
+              name: "Mathematics",
+              resources: [
+                {
+                  title: "Time speed and distance questions (PDF)",
+                  url: "https://drive.google.com/file/d/1lNfn06yvD_lnbOh4EtvR5dgk0Wlti94g/view?usp=drive_link",
+                },
+              ],
+            },
+          ],
+        },
+      ];
+
+      const QUOTES = [
+        "The secret of getting ahead is getting started.",
+        "Discipline is choosing between what you want now and what you want most.",
+        "Small steps every day.",
+        "Done is better than perfect.",
+        "You don't have to be great to start, but you have to start to be great.",
+      ];
+
+      /* ---------------------------------------------------------------
+   RENDER
+------------------------------------------------------------------*/
+
+      function renderSubjects() {
+        const root = document.getElementById("subjects");
+        root.innerHTML = "";
+        const list = document.createElement("ul");
+        list.className = "subjects";
+
+        SUBJECTS.forEach((subject) => {
+          const subjDetails = document.createElement("details");
+          subjDetails.className = "subject";
+          const subjSummary = document.createElement("summary");
+          subjSummary.textContent = subject.name;
+          subjDetails.appendChild(subjSummary);
+
+          subject.topics.forEach((topic) => {
+            const topicDetails = document.createElement("details");
+            topicDetails.className = "topic";
+            const topicSummary = document.createElement("summary");
+            topicSummary.textContent = topic.name;
+            topicDetails.appendChild(topicSummary);
+
+            const resList = document.createElement("ul");
+            resList.className = "resources";
+            topic.resources.forEach((res) => {
+              const li = document.createElement("li");
+              const a = document.createElement("a");
+              a.href = res.url;
+              a.target = "_blank";
+              a.rel = "noopener";
+              a.textContent = res.title;
+              li.appendChild(a);
+              resList.appendChild(li);
+            });
+            topicDetails.appendChild(resList);
+            subjDetails.appendChild(topicDetails);
+          });
+
+          list.appendChild(subjDetails);
+        });
+
+        root.appendChild(list);
+      }
+
+      function renderAnnouncements(items) {
+        const el = document.getElementById("announcements");
+        el.innerHTML = "";
+        items.forEach((item) => {
+          const li = document.createElement("li");
+          const dateSpan = document.createElement("span");
+          dateSpan.className = "date";
+          dateSpan.textContent = item.date;
+          li.appendChild(dateSpan);
+          li.appendChild(document.createTextNode(item.text));
+          el.appendChild(li);
+        });
+      }
+
+      function parseCSV(text) {
+        const lines = text.trim().split("\n").slice(1); // skip header row
+        return lines
+          .map((line) => {
+            const parts = line.split(",");
+            return {
+              date: (parts[0] || "").replace(/"/g, "").trim(),
+              text: parts.slice(1).join(",").replace(/"/g, "").trim(),
+            };
+          })
+          .filter((item) => item.text);
+      }
+
+      function loadAnnouncements() {
+        if (!ANNOUNCEMENTS_CSV_URL) {
+          renderAnnouncements(FALLBACK_ANNOUNCEMENTS);
+          return;
+        }
+        fetch(ANNOUNCEMENTS_CSV_URL)
+          .then((res) => res.text())
+          .then((text) => renderAnnouncements(parseCSV(text)))
+          .catch(() => renderAnnouncements(FALLBACK_ANNOUNCEMENTS));
+      }
+
+      function showRandomQuote() {
+        const q = QUOTES[Math.floor(Math.random() * QUOTES.length)];
+        document.getElementById("quote-text").textContent = '"' + q + '"';
+      }
+
+      document
+        .getElementById("next-quote")
+        .addEventListener("click", showRandomQuote);
+
+      renderSubjects();
+      loadAnnouncements();
+      showRandomQuote();
+
+      if ("serviceWorker" in navigator) {
+        window.addEventListener("load", () => {
+          navigator.serviceWorker.register("sw.js").catch(() => {});
+        });
+      }
+    </script>
+  </body>
+</html>
